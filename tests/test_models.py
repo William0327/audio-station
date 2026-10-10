@@ -1,4 +1,5 @@
 import hashlib
+from copy import deepcopy
 from types import SimpleNamespace
 import httpx
 import pytest
@@ -65,3 +66,28 @@ def test_low_disk_preserves_models(catalogue,monkeypatch):
     monkeypatch.setattr(models.shutil,'disk_usage',lambda path:SimpleNamespace(free=1))
     with pytest.raises(RuntimeError,match='space'):
         models.install('approved',lambda *args:None)
+
+
+def test_roformer_bundle_installs_config_and_weights_before_becoming_selectable(tmp_path,monkeypatch):
+    monkeypatch.setattr(s,'MODELS',tmp_path/'models')
+    s.MODELS.mkdir()
+    id='bs-roformer-viperx-1297'
+    entry=deepcopy(models.CATALOG[id])
+    content={spec['path']: ('test-'+spec['path']).encode() for spec in entry['files']}
+    for spec in entry['files']:
+        spec.update(size=len(content[spec['path']]),sha256=hashlib.sha256(content[spec['path']]).hexdigest())
+    monkeypatch.setitem(models.CATALOG,id,entry)
+    original=httpx.Client
+    monkeypatch.setattr(models.httpx,'Client',lambda **kwargs:original(
+        transport=httpx.MockTransport(lambda request:httpx.Response(200,content=content[request.url.path.split('/')[-1]])),**kwargs))
+    filename=entry['model_filename']
+    config=next(spec['path'] for spec in entry['files'] if spec['path'].endswith('.yaml'))
+    (s.MODELS/filename).write_bytes(content[filename])
+    assert filename not in s.installed_models()
+    assert next(item for item in models.listing() if item['id']==id)['installed'] is False
+    models.install(id,lambda *args:None)
+    assert s.installed_models()==[filename]
+    assert (s.MODELS/config).read_bytes()==content[config]
+    assert next(item for item in models.listing() if item['id']==id)['installed'] is True
+    models.remove(id,lambda *args:None)
+    assert s.installed_models()==[]

@@ -224,7 +224,11 @@ def gpu():
 
 @app.get('/api/separator/models')
 def models():
-    return {'models': s.installed_models()}
+    from controller.catalog import CATALOG
+    installed = s.installed_models()
+    labels = {entry['model_filename']: entry['title'] for entry in CATALOG.values()
+              if entry['tool'] == 'separator' and entry.get('model_filename') in installed}
+    return {'models': installed, 'labels': labels}
 
 @app.post('/api/separator/jobs', status_code=201)
 async def submit(request: Request, filename: str, model: str, format: str = 'WAV'):

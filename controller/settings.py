@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from controller.catalog import CATALOG
 
 DATA = Path(os.getenv('DATA_DIR', './data')).resolve()
 INPUT = Path(os.getenv('INPUT_DIR', './input')).resolve()
@@ -15,7 +16,14 @@ APPLIO_URL = os.getenv('APPLIO_PUBLIC_URL', 'http://localhost:6969')
 EXTENSIONS = {'.wav', '.mp3', '.flac', '.ogg', '.m4a', '.aac', '.aiff'}
 
 def installed_models():
+    bundles = {entry['model_filename']: entry['files'] for entry in CATALOG.values()
+               if entry['tool'] == 'separator' and 'model_filename' in entry}
+    support_files = {spec['path'] for filename, files in bundles.items()
+                     for spec in files if spec['path'] != filename}
     return sorted(p.name for p in MODELS.iterdir() if p.is_file() and not p.is_symlink()
+                  and p.name not in support_files
+                  and all((MODELS / spec['path']).is_file() and not (MODELS / spec['path']).is_symlink()
+                          for spec in bundles.get(p.name, []))
                   and p.suffix.lower() in {'.onnx', '.pth', '.pt', '.ckpt', '.yaml', '.yml'})
 
 def contained(root, *parts):

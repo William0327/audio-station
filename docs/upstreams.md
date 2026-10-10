@@ -10,6 +10,7 @@
 | Applio build pip | 25.1.1 | Upgraded before PyTorch installation to handle normalized dependency names in wheel metadata |
 | ONNX Runtime GPU | 1.22.0 | exact PyPI package |
 | Separator audio decoder | audioread 3.0.1 | Explicit runtime dependency for the separator inference import; validated during image build |
+| BS-RoFormer Viperx 1297 | `model_bs_roformer_ep_317_sdr_12.9755.ckpt` + matching YAML | [audio-separator model assets](https://github.com/nomadkaraoke/python-audio-separator/releases/tag/model-configs); both SHA256 hashes independently computed from release assets and recorded in `controller/catalog.py` |
 | CUDA runtime | 12.8.1, cuDNN runtime, Ubuntu 24.04 | NVIDIA CUDA image |
 | Applio inference catalogue | HF commit `70ed563897504c756ec94067c12c902c4fd42025` | [official publisher assets](https://huggingface.co/IAHispano/Applio/tree/70ed563897504c756ec94067c12c902c4fd42025/Resources) |
 

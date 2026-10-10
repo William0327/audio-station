@@ -4,6 +4,7 @@ SHA256 values were independently streamed from pinned publisher assets.
 Model licensing/consent is distinct from Audio Station's own MIT license.
 """
 HF = 'https://huggingface.co/IAHispano/Applio/resolve/70ed563897504c756ec94067c12c902c4fd42025/Resources/'
+SEPARATOR_MODELS = 'https://github.com/nomadkaraoke/python-audio-separator/releases/download/model-configs/'
 CATALOG = {
     'uvr-karaoke': {
         'title': 'UVR MDX Karaoke 2', 'tool': 'separator',
@@ -13,6 +14,21 @@ CATALOG = {
         'files': [dict(path='UVR_MDXNET_KARA_2.onnx', size=52786726,
                        url='https://github.com/TRvlvr/model_repo/releases/download/all_public_uvr_models/UVR_MDXNET_KARA_2.onnx',
                        sha256='bf32e15105a09c0f7dddd2b67346146334d6f3ecb399ed7638eba2ab07cbf5f4')],
+    },
+    'bs-roformer-viperx-1297': {
+        'title': 'BS-RoFormer Viperx 1297', 'tool': 'separator',
+        'publisher': 'Viperx / audio-separator model repository',
+        'source': 'https://github.com/nomadkaraoke/python-audio-separator/releases/tag/model-configs',
+        'license_note': 'Review the publisher terms before use; model rights are separate from the controller license.',
+        'model_filename': 'model_bs_roformer_ep_317_sdr_12.9755.ckpt',
+        'files': [
+            dict(path='model_bs_roformer_ep_317_sdr_12.9755.yaml', size=2273,
+                 url=SEPARATOR_MODELS+'model_bs_roformer_ep_317_sdr_12.9755.yaml',
+                 sha256='2bfdd16c656bd9519aba757cc4f8834b7ede675eb1e00ec4772d74ae1c41af7f'),
+            dict(path='model_bs_roformer_ep_317_sdr_12.9755.ckpt', size=639331213,
+                 url=SEPARATOR_MODELS+'model_bs_roformer_ep_317_sdr_12.9755.ckpt',
+                 sha256='5b84f37e8d444c8cb30c79d77f613a41c05868ff9c9ac6c7049c00aefae115aa'),
+        ],
     },
     'applio-essentials': {
         'title': 'Applio inference essentials', 'tool': 'applio',

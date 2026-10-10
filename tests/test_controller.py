@@ -75,6 +75,19 @@ def wait_job(client, id, state):
     pytest.fail(f'Expected {state}, got {row}')
 
 
+def test_roformer_model_api_uses_friendly_label_and_hides_configuration(environment):
+    from controller.catalog import CATALOG
+    client, *_ = environment
+    entry=CATALOG['bs-roformer-viperx-1297']
+    for spec in entry['files']:
+        (s.MODELS/spec['path']).write_bytes(b'test asset')
+    response=client.get('/api/separator/models').json()
+    filename=entry['model_filename']
+    assert filename in response['models']
+    assert response['labels'][filename]=='BS-RoFormer Viperx 1297'
+    assert not any(name.endswith('.yaml') for name in response['models'])
+
+
 def test_complete_workflow_and_safe_downloads(environment):
     client, *_ = environment
     assert client.get('/').status_code == 200

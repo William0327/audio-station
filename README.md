@@ -14,6 +14,8 @@ bash install.sh
 
 Open [localhost:8080](http://localhost:8080), choose **Setup & models**, and install Audio Separator or Applio independently. Install a curated model bundle, then explicitly start the tool. No container names, network names, or filesystem paths need manual configuration in managed mode.
 
+Separator models include **UVR MDX Karaoke 2** and **BS-RoFormer Viperx 1297**. Install Viperx 1297 from Setup & models (about 610 MiB for its checkpoint and matching configuration), then select it in the separation tab. Downloads require your approval and checksum verification; no weights are included in the repository.
+
 Requires Ubuntu 22.04/24.04 x86_64, local rootful Docker with Compose 2.24+, Python 3.10+, NVIDIA Container Toolkit, NVIDIA driver 570.124.06+, and at least 30 GiB free. The installer validates prerequisites with actionable errors; it does not install system drivers/packages or overwrite existing directories. [Installation guide](docs/installation.md).
 
 ## What it does

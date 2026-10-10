@@ -91,5 +91,5 @@ $('job-form').addEventListener('submit',async e=>{
   catch(error){notice(error.message);}finally{sending=false;$('submit').textContent='Separate audio ↗';await poll();}
 });
 $('refresh').addEventListener('click',poll);$('close-log').addEventListener('click',()=>$('log-dialog').close());
-async function init(){try{const result=await api('/api/separator/models');$('model').replaceChildren(...(result.models.length?result.models.map(name=>{const option=node('option',name);option.value=name;return option;}):[node('option','No local models found')]));if(!result.models.length){$('model').firstChild.value='';if(workspace)notice('No installed models found. Configure the existing models directory before processing.');}}catch(e){notice(e.message);}await poll();}
+async function init(){try{const result=await api('/api/separator/models');$('model').replaceChildren(...(result.models.length?result.models.map(name=>{const option=node('option',result.labels?.[name]||name);option.value=name;return option;}):[node('option','No local models found')]));if(!result.models.length){$('model').firstChild.value='';if(workspace)notice('No installed models found. Configure the existing models directory before processing.');}}catch(e){notice(e.message);}await poll();}
 init();setInterval(poll,5000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)poll();});
