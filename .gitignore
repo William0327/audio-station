@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+.pytest_cache/
+.env
+data/
+input/
+output/
+models/
+*.sqlite*
+.env.*
+!.env.example
+*.station-part
+*.station-new
+release/
+applio/

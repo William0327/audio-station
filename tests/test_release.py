@@ -1,0 +1,33 @@
+from pathlib import Path
+import yaml
+from scripts import check_release
+
+ROOT=Path(__file__).resolve().parent.parent
+
+
+def test_compose_profiles_and_privilege_boundary():
+    config=yaml.safe_load((ROOT/'compose.yaml').read_text())
+    services=config['services']
+    assert set(services)=={'controller','gateway','separator','applio'}
+    assert services['separator']['profiles']==['separator']
+    assert services['applio']['profiles']==['applio']
+    assert services['separator']['restart']=='no'
+    assert services['applio']['restart']=='no'
+    assert 'ports' not in services['gateway']
+    assert all('docker.sock' not in volume for volume in services['controller']['volumes'])
+    assert 'deploy' not in services['controller']
+    assert set(config['volumes']) >= {'station-models','station-data','station-state','applio-models','applio-cache'}
+
+
+def test_release_source_hygiene():
+    assert check_release.check(check_release.source_files())==[]
+
+
+def test_declared_upstream_images_match_adapters():
+    from controller.adapters import TOOLS
+    config=yaml.safe_load((ROOT/'compose.yaml').read_text())
+    for id,tool in TOOLS.items():
+        service=config['services'][id]
+        assert service['image']==tool.image
+        assert tuple(service['command'])==tool.command
+        assert service['labels']['io.audio-station.version']==tool.version

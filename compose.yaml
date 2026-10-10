@@ -1,0 +1,158 @@
+name: ${STATION_INSTANCE:-audio-station}
+x-controller: &controller-image
+  image: audio-station/controller:1.0.0-rc.1
+  build:
+    context: .
+    dockerfile: controller/Dockerfile
+x-gpu: &gpu
+  deploy:
+    resources:
+      reservations:
+        devices:
+          - driver: nvidia
+            count: all
+            capabilities: [gpu]
+services:
+  controller:
+    <<: *controller-image
+    restart: unless-stopped
+    init: true
+    ports: ["${BIND_ADDRESS:-127.0.0.1}:${CONTROLLER_PORT:-8080}:8080"]
+    environment:
+      DATA_DIR: /data
+      INPUT_DIR: /input
+      OUTPUT_DIR: /output
+      MODELS_DIR: /models
+      GATEWAY_URL: http://gateway:8081
+      GATEWAY_TOKEN: ${GATEWAY_TOKEN:?Run bash install.sh to generate configuration}
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-500}
+      APPLIO_PUBLIC_URL: ${APPLIO_PUBLIC_URL:-http://localhost:6969}
+      DEPLOYMENT_MODE: ${DEPLOYMENT_MODE:-managed}
+    volumes:
+      - ${HOST_DATA_DIR:-station-data}:/data
+      - ${HOST_INPUT_DIR:-station-input}:/input
+      - ${HOST_OUTPUT_DIR:-station-output}:/output
+      - ${HOST_MODELS_DIR:-station-models}:/models:ro
+    networks: [control]
+    depends_on:
+      gateway: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    stop_grace_period: 40s
+  gateway:
+    <<: *controller-image
+    command: [uvicorn, controller.gateway:app, --host, 0.0.0.0, --port, '8081']
+    user: '0:0'
+    restart: unless-stopped
+    init: true
+    environment:
+      GATEWAY_TOKEN: ${GATEWAY_TOKEN:?Run bash install.sh}
+      DEPLOYMENT_MODE: ${DEPLOYMENT_MODE:-managed}
+      STATION_INSTANCE: ${STATION_INSTANCE:-audio-station}
+      WORKLOAD_NETWORK: ${WORKLOAD_NETWORK:-audio-station-workloads}
+      BIND_ADDRESS: ${BIND_ADDRESS:-127.0.0.1}
+      APPLIO_PORT: ${APPLIO_PORT:-6969}
+      STATE_DIR: /state
+      INPUT_DIR: /input
+      OUTPUT_DIR: /output
+      MODELS_DIR: /models
+      APPLIO_MODELS_DIR: /applio-models
+      HOST_INPUT_DIR: ${HOST_INPUT_DIR:-}
+      HOST_OUTPUT_DIR: ${HOST_OUTPUT_DIR:-}
+      HOST_MODELS_DIR: ${HOST_MODELS_DIR:-}
+      SEPARATOR_CONTAINER: ${SEPARATOR_CONTAINER:-ai-separator}
+      APPLIO_CONTAINER: ${APPLIO_CONTAINER:-ai-applio}
+      SEPARATOR_INPUT_DIR: ${SEPARATOR_INPUT_DIR:-/input}
+      SEPARATOR_OUTPUT_DIR: ${SEPARATOR_OUTPUT_DIR:-/output}
+      SEPARATOR_MODELS_DIR: ${SEPARATOR_MODELS_DIR:-/models}
+      SEPARATOR_BINARY: ${SEPARATOR_BINARY:-audio-separator}
+      APPLIO_HEALTH_URL: ${APPLIO_HEALTH_URL:-}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - station-state:/state
+      - ${HOST_INPUT_DIR:-station-input}:/input:ro
+      - ${HOST_OUTPUT_DIR:-station-output}:/output
+      - ${HOST_MODELS_DIR:-station-models}:/models
+      - applio-models:/applio-models
+    networks: [control, workloads, downloads]
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8081/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+  # Optional maintenance profiles; ordinary compose up excludes AI workloads.
+  separator:
+    <<: *gpu
+    profiles: [separator]
+    image: audio-station/separator:0.47.0-1
+    build: ./deploy/separator
+    container_name: ${STATION_INSTANCE:-audio-station}-separator
+    entrypoint: []
+    command: [python3, -c, 'import time; time.sleep(10**9)']
+    restart: 'no'
+    init: true
+    labels:
+      io.audio-station.managed: ${STATION_INSTANCE:-audio-station}
+      io.audio-station.tool: separator
+      io.audio-station.version: '0.47.0'
+    volumes:
+      - ${HOST_INPUT_DIR:-station-input}:/input:ro
+      - ${HOST_OUTPUT_DIR:-station-output}:/output
+      - ${HOST_MODELS_DIR:-station-models}:/models:ro
+    networks: [workloads]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+  applio:
+    <<: *gpu
+    profiles: [applio]
+    image: audio-station/applio:3.5.1-1
+    build: ./deploy/applio
+    container_name: ${STATION_INSTANCE:-audio-station}-applio
+    entrypoint: []
+    command: [python3, /station/launch_applio.py]
+    restart: 'no'
+    init: true
+    labels:
+      io.audio-station.managed: ${STATION_INSTANCE:-audio-station}
+      io.audio-station.tool: applio
+      io.audio-station.version: '3.5.1'
+    ports: ["${BIND_ADDRESS:-127.0.0.1}:${APPLIO_PORT:-6969}:6969"]
+    environment:
+      HF_HOME: /cache/huggingface
+      TORCH_HOME: /cache/torch
+      GRADIO_ANALYTICS_ENABLED: 'False'
+    volumes:
+      - applio-models:/app/rvc/models
+      - applio-assets:/app/assets
+      - applio-logs:/app/logs
+      - applio-cache:/cache
+    networks: [workloads]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+volumes:
+  station-data: {name: '${STATION_INSTANCE:-audio-station}-data'}
+  station-state: {name: '${STATION_INSTANCE:-audio-station}-state'}
+  station-input: {name: '${STATION_INSTANCE:-audio-station}-input'}
+  station-output: {name: '${STATION_INSTANCE:-audio-station}-output'}
+  station-models: {name: '${STATION_INSTANCE:-audio-station}-models'}
+  applio-models: {name: '${STATION_INSTANCE:-audio-station}-applio-models'}
+  applio-assets: {name: '${STATION_INSTANCE:-audio-station}-applio-assets'}
+  applio-logs: {name: '${STATION_INSTANCE:-audio-station}-applio-logs'}
+  applio-cache: {name: '${STATION_INSTANCE:-audio-station}-applio-cache'}
+networks:
+  control: {internal: true}
+  downloads: {}
+  workloads:
+    name: ${WORKLOAD_NETWORK:-audio-station-workloads}
+    external: ${WORKLOAD_NETWORK_EXTERNAL:-false}

@@ -1,0 +1,49 @@
+name: CI
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  tests:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: python -m pip install -r requirements-dev.txt
+      - run: python -m pytest -q
+      - run: python scripts/check_release.py
+      - run: bash -n install.sh scripts/inspect-host.sh
+      - name: Validate all Compose profiles
+        env:
+          GATEWAY_TOKEN: ci-only-ephemeral-configuration
+        run: docker compose --profile separator --profile applio config --quiet
+  controller-smoke:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and start CPU control services
+        run: |
+          printf 'GATEWAY_TOKEN=%s\n' "$(openssl rand -hex 32)" > .env
+          for suffix in data input output; do
+            docker volume create --label io.audio-station.managed=audio-station "audio-station-$suffix"
+            docker run --rm -v "audio-station-$suffix:/volume" python:3.12.9-slim-bookworm python -c 'import os; os.chown("/volume",10001,10001)'
+          done
+          docker compose up -d --build --wait --wait-timeout 180 controller gateway
+      - name: Verify first-run state without a GPU or any AI workload
+        run: |
+          curl --fail http://localhost:8080/health
+          curl --fail http://localhost:8080/setup
+          curl --fail http://localhost:8080/api/setup | python -c 'import json,sys; d=json.load(sys.stdin); assert d["mode"]=="managed"; assert all(not t["installed"] and t["state"]=="stopped" for t in d["tools"].values())'
+          test -z "$(docker ps -a --filter label=io.audio-station.tool --format '{{.ID}}')"
+          test -z "$(docker compose port gateway 8081)"
+      - name: Diagnostics
+        if: failure()
+        run: docker compose logs --tail=100 controller gateway
+      - name: Clean ephemeral CI deployment
+        if: always()
+        run: docker compose down

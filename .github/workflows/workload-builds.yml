@@ -1,0 +1,23 @@
+name: Pinned workload builds (release gate)
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        tool: [separator, applio]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build pinned source and validate installed application without starting UI/inference
+        run: |
+          docker build -t station-check:${{ matrix.tool }} deploy/${{ matrix.tool }}
+          if [ '${{ matrix.tool }}' = separator ]; then
+            docker run --rm station-check:separator python3 -c 'from importlib.metadata import version; assert version("audio-separator")=="0.47.0"'
+          else
+            docker run --rm station-check:applio python3 -c 'from pathlib import Path; assert Path("/app/app.py").is_file(); import torch, gradio'
+          fi
+# Real NVIDIA inference/VRAM checks still require docs/release-checklist.md.

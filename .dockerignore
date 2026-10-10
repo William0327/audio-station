@@ -1,0 +1,7 @@
+*
+!controller/
+!controller/**
+!deploy/
+!deploy/**
+**/__pycache__/
+**/*.pyc
