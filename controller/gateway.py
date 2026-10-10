@@ -10,7 +10,7 @@ import httpx
 from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel, Field
 from controller import settings as s
-from controller import adapters, operations, model_manager
+from controller import adapters, operations, model_manager, voices
 from controller.catalog import CATALOG
 
 @asynccontextmanager
@@ -154,6 +154,69 @@ class Run(BaseModel):
     extension: str
     model: str
     format: str
+
+
+def managed_applio():
+    if adapters.MODE != 'managed':
+        raise HTTPException(409, 'Integrated Applio inference/imports require managed mode; use the external Applio interface')
+
+
+@app.get('/applio/voices')
+def voice_library():
+    managed_applio()
+    return voices.listing()
+
+
+@app.post('/applio/voices/import')
+def import_voice(item: voices.VoiceImport):
+    managed_applio()
+    with operations.lock:
+        return voices.commit_import(item)
+
+
+class Convert(Run):
+    options: voices.ConversionOptions = voices.ConversionOptions()
+
+
+@app.post('/applio/run')
+def convert(job: Convert):
+    managed_applio()
+    if job.extension not in s.EXTENSIONS or job.format not in {'WAV','FLAC','MP3'}:
+        raise HTTPException(422, 'Invalid conversion configuration')
+    model = voices.asset_path(job.model, '.pth')
+    index = voices.asset_path(job.options.index, '.index') if job.options.index else None
+    if not run_lock.acquire(blocking=False):
+        raise HTTPException(409, 'An Audio Station GPU job is already running')
+    try:
+        c = container('applio')
+        if c.status != 'running':
+            raise HTTPException(409, 'Start Applio before processing')
+        if c.attrs.get('Config', {}).get('Image') != adapters.TOOLS['applio'].image:
+            raise HTTPException(409, 'Applio container needs an explicit update for integrated inference. Follow docs/applio.md; preserve all volumes.')
+        source = s.contained(s.INPUT, job.id, 'source'+job.extension)
+        if not source.is_file() or source.is_symlink():
+            raise HTTPException(404, 'Input missing')
+        destination = s.contained(s.OUTPUT, job.id)
+        destination.mkdir(parents=True, exist_ok=True)
+        payload = {'input': f'/input/{job.id}/source{job.extension}',
+                   'output': f'/output/{job.id}/converted.{job.format.lower()}',
+                   'model': '/app/logs/'+model.relative_to(s.VOICES).as_posix(),
+                   'index': '/app/logs/'+index.relative_to(s.VOICES).as_posix() if index else '',
+                   'format': job.format, 'options': job.options.model_dump()}
+        client = docker.from_env().api
+        execution = client.exec_create(c.id, ['python3','/station/convert_applio.py',json.dumps(payload)], stdout=True, stderr=True)
+        with (destination/'process.log').open('wb') as log:
+            for chunk in client.exec_start(execution['Id'], stream=True):
+                if log.tell()+len(chunk)>2*1024*1024:
+                    log.seek(0)
+                    log.truncate()
+                log.write(chunk)
+                log.flush()
+        return {'exit_code': client.exec_inspect(execution['Id'])['ExitCode']}
+    except docker.errors.DockerException:
+        raise HTTPException(502, 'Applio execution interrupted or Docker unavailable')
+    finally:
+        run_lock.release()
 
 @app.post('/separator/run')
 def run(job: Run):

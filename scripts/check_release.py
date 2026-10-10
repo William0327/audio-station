@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parent.parent
 TOP = {'README.md','LICENSE','VERSION','CHANGELOG.md','SECURITY.md','install.sh',
        'compose.yaml','.env.example','.gitignore','.dockerignore','.gitattributes','requirements-dev.txt'}
 DIRS = {'controller','deploy','scripts','tests','docs','.github'}
-BINARY = {'.onnx','.pth','.pt','.ckpt','.bin','.wav','.mp3','.flac','.ogg','.m4a','.sqlite','.sqlite3','.pyc'}
+BINARY = {'.onnx','.pth','.pt','.ckpt','.index','.bin','.wav','.mp3','.flac','.ogg','.m4a','.sqlite','.sqlite3','.pyc'}
 
 
 def source_files():

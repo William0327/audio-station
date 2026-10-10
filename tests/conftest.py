@@ -7,5 +7,6 @@ from controller import adapters
 def isolated_gateway_state(tmp_path, monkeypatch):
     monkeypatch.setattr(s, 'STATE', tmp_path / 'gateway-state')
     monkeypatch.setattr(s, 'APPLIO_MODELS', tmp_path / 'applio-models')
+    monkeypatch.setattr(s, 'VOICES', tmp_path / 'applio-voices')
     # Original controller tests exercise external compatibility; managed tests opt in.
     monkeypatch.setattr(adapters, 'MODE', 'external')

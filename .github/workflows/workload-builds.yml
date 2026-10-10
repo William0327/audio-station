@@ -18,6 +18,6 @@ jobs:
           if [ '${{ matrix.tool }}' = separator ]; then
             docker run --rm station-check:separator python3 -c 'from importlib.metadata import version; from audio_separator.separator import Separator; import audioread, torch; assert torch.__version__=="2.7.1+cu128"; assert version("audio-separator")=="0.47.0"; assert version("audioread")=="3.0.1"'
           else
-            docker run --rm station-check:applio python3 -c 'from pathlib import Path; assert Path("/app/app.py").is_file(); import torch, gradio'
+            docker run --rm station-check:applio python3 -c 'from pathlib import Path; import runpy; assert Path("/app/app.py").is_file(); runpy.run_path("/station/convert_applio.py", run_name="check"); from core import run_infer_script; from rvc.infer.infer import VoiceConverter; import torch, gradio'
           fi
 # Real NVIDIA inference/VRAM checks still require docs/release-checklist.md.

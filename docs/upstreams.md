@@ -5,6 +5,7 @@
 | Audio Station | 1.0.0-rc.1 | `VERSION` |
 | Audio Separator | 0.47.0, source commit `c7f2a5c8c3beea1f9ec9ab7206caaebc05f45ac4` | [official release](https://github.com/nomadkaraoke/python-audio-separator/releases/tag/v0.47.0), exact PyPI package |
 | Applio | 3.5.1, commit `b8791412993ebc934c148bd84798782af2f0439e` | [official release](https://github.com/IAHispano/Applio/releases/tag/3.5.1) |
+| Applio workload image | `audio-station/applio:3.5.1-2` | Local image revision adds integrated conversion and shared audio mounts; upstream application stays pinned |
 | Applio source archive SHA256 | `56d30b0d39d45d6c4c3aa331b8dbd8fd1417924d29defea200643cab7c7f864f` | checked during image build |
 | PyTorch / Torchaudio | 2.7.1, CUDA 12.8 wheels | [official PyTorch packages](https://download.pytorch.org/whl/cu128) |
 | Applio build pip | 25.1.1 | Upgraded before PyTorch installation to handle normalized dependency names in wheel metadata |

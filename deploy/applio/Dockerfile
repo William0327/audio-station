@@ -8,6 +8,7 @@ RUN python -m pip install --no-cache-dir --upgrade pip==25.1.1
 RUN pip install --no-cache-dir torch==2.7.1 torchvision==0.22.1 torchaudio==2.7.1 --index-url https://download.pytorch.org/whl/cu128
 RUN pip install --no-cache-dir -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cu128
 COPY launch_applio.py /station/launch_applio.py
+COPY convert_applio.py /station/convert_applio.py
 ENV GRADIO_ANALYTICS_ENABLED=False HF_HOME=/cache/huggingface TORCH_HOME=/cache/torch
 EXPOSE 6969
 CMD ["python3", "/station/launch_applio.py"]

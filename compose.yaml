@@ -26,6 +26,7 @@ services:
       GATEWAY_URL: http://gateway:8081
       GATEWAY_TOKEN: ${GATEWAY_TOKEN:?Run bash install.sh to generate configuration}
       MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-500}
+      MAX_VOICE_IMPORT_MB: ${MAX_VOICE_IMPORT_MB:-2048}
       APPLIO_PUBLIC_URL: ${APPLIO_PUBLIC_URL:-http://localhost:6969}
       DEPLOYMENT_MODE: ${DEPLOYMENT_MODE:-managed}
     volumes:
@@ -65,6 +66,8 @@ services:
       OUTPUT_DIR: /output
       MODELS_DIR: /models
       APPLIO_MODELS_DIR: /applio-models
+      APPLIO_VOICES_DIR: /voices
+      MAX_VOICE_IMPORT_MB: ${MAX_VOICE_IMPORT_MB:-2048}
       HOST_INPUT_DIR: ${HOST_INPUT_DIR:-}
       HOST_OUTPUT_DIR: ${HOST_OUTPUT_DIR:-}
       HOST_MODELS_DIR: ${HOST_MODELS_DIR:-}
@@ -82,6 +85,7 @@ services:
       - ${HOST_OUTPUT_DIR:-station-output}:/output
       - ${HOST_MODELS_DIR:-station-models}:/models
       - applio-models:/applio-models
+      - applio-logs:/voices
     networks: [control, workloads, downloads]
     healthcheck:
       test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8081/health', timeout=3)"]
@@ -117,7 +121,7 @@ services:
   applio:
     <<: *gpu
     profiles: [applio]
-    image: audio-station/applio:3.5.1-1
+    image: audio-station/applio:3.5.1-2
     build: ./deploy/applio
     container_name: ${STATION_INSTANCE:-audio-station}-applio
     entrypoint: []
@@ -138,6 +142,8 @@ services:
       - applio-assets:/app/assets
       - applio-logs:/app/logs
       - applio-cache:/cache
+      - ${HOST_INPUT_DIR:-station-input}:/input:ro
+      - ${HOST_OUTPUT_DIR:-station-output}:/output
     networks: [workloads]
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]

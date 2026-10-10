@@ -23,7 +23,7 @@ Requires Ubuntu 22.04/24.04 x86_64, local rootful Docker with Compose 2.24+, Pyt
 - Keep the control panel online while independent GPU tools start/stop on demand.
 - Provision pinned Audio Separator and Applio images through a narrow, authenticated Docker gateway. Installation leaves tools stopped.
 - Separate uploaded audio with installed local models; queue jobs, cancel, inspect logs, listen to stems, download individual files or ZIPs, and manage history.
-- Open Applio's existing voice-conversion UI without rebuilding it.
+- Convert audio with Applio in Audio Station: import voice models/indexes, adjust pitch, queue conversion, and listen/download results. Send a separated stem directly to conversion. The upstream UI remains available for advanced work.
 - Install only explicitly approved catalogue models with byte progress, SHA256 verification, atomic writes, and persistent caches.
 - Preserve existing installations through advanced external-container mode; no automatic adoption or directory migration.
 
@@ -43,6 +43,7 @@ Only the gateway sees the Docker socket. No API accepts arbitrary images, comman
 ## Documentation
 
 - [Install and first-run setup](docs/installation.md)
+- [Applio conversion and voice imports](docs/applio.md)
 - [Migrate an existing installation](docs/migration.md)
 - [Update, back up, and roll back](docs/upgrading.md)
 - [Troubleshooting](docs/troubleshooting.md)

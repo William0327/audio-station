@@ -30,7 +30,7 @@ TOOLS = {
     'separator': Tool('separator', 'Audio Separator', '0.47.0',
                       'audio-station/separator:0.47.0-1', ('python3', '-c', 'import time; time.sleep(10**9)')),
     'applio': Tool('applio', 'Applio', '3.5.1',
-                   'audio-station/applio:3.5.1-1', ('python3', '/station/launch_applio.py')),
+                   'audio-station/applio:3.5.1-2', ('python3', '/station/launch_applio.py')),
 }
 
 
@@ -123,6 +123,8 @@ class ManagedAdapter(ContainerLifecycle):
                 f'{prefix}-applio-assets': {'bind': '/app/assets', 'mode': 'rw'},
                 f'{prefix}-applio-logs': {'bind': '/app/logs', 'mode': 'rw'},
                 f'{prefix}-applio-cache': {'bind': '/cache', 'mode': 'rw'},
+                storage('HOST_INPUT_DIR', 'input'): {'bind': '/input', 'mode': 'ro'},
+                storage('HOST_OUTPUT_DIR', 'output'): {'bind': '/output', 'mode': 'rw'},
             }
             ports = {'6969/tcp': (os.getenv('BIND_ADDRESS', '127.0.0.1'), int(os.getenv('APPLIO_PORT', '6969')))}
             environment = {'HF_HOME': '/cache/huggingface', 'TORCH_HOME': '/cache/torch', 'GRADIO_ANALYTICS_ENABLED': 'False'}

@@ -1,4 +1,6 @@
 import asyncio
+import json
+import hashlib
 import shutil
 import sqlite3
 import threading
@@ -14,6 +16,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from controller import settings as s
+from controller.voices import ConversionOptions
 
 guard = threading.RLock()
 shutdown = threading.Event()
@@ -46,7 +49,7 @@ def gateway(method, path, **kwargs):
     if not s.TOKEN:
         raise HTTPException(503, 'Docker gateway is not configured; run the installer on your Linux workstation')
     try:
-        with httpx.Client(timeout=httpx.Timeout(15, read=None if path == '/separator/run' else 15)) as client:
+        with httpx.Client(timeout=httpx.Timeout(15, read=None if path in {'/separator/run','/applio/run','/applio/voices/import'} else 15)) as client:
             response = client.request(method, s.GATEWAY + path, headers={'X-Gateway-Token': s.TOKEN}, **kwargs)
         if response.is_error:
             try:
@@ -60,12 +63,13 @@ def gateway(method, path, **kwargs):
 
 def worker():
     # An interrupted Docker exec may outlive the controller. Stop it before accepting another job.
-    interrupted = query("SELECT id FROM jobs WHERE state='running'")
+    interrupted = query("SELECT DISTINCT tool FROM jobs WHERE state='running'")
     while interrupted and not shutdown.is_set():
         try:
-            gateway('POST', '/services/separator/stop')
-            query("UPDATE jobs SET state='failed', error=?, finished=? WHERE state='running'",
-                  ('Controller restarted during processing; separator stopped for recovery', now()))
+            for item in interrupted:
+                gateway('POST', f"/services/{item['tool']}/stop")
+                query("UPDATE jobs SET state='failed', error=?, finished=? WHERE state='running' AND tool=?",
+                      ('Controller restarted during processing; workload stopped for recovery', now(), item['tool']))
             interrupted = []
         except HTTPException:
             shutdown.wait(5)
@@ -79,15 +83,18 @@ def worker():
             continue
         execution_attempted = False
         try:
-            state = gateway('GET', '/services/separator')['state']
+            state = gateway('GET', f"/services/{row['tool']}")['state']
             if state != 'ready':
-                raise HTTPException(409, 'Audio Separator must be ready before processing; start it and resubmit')
+                raise HTTPException(409, f"{row['tool'].title()} must be ready before processing; start it and resubmit")
             execution_attempted = True
-            result = gateway('POST', '/separator/run', json={k: row[k] for k in ('id', 'extension', 'model', 'format')})
+            payload = {k: row[k] for k in ('id','extension','model','format')}
+            if row['tool'] == 'applio':
+                payload['options'] = json.loads(row['options'])
+            result = gateway('POST', f"/{row['tool']}/run", json=payload)
             if result['exit_code'] != 0:
-                raise HTTPException(500, f"Separator exited with code {result['exit_code']}; see process log")
+                raise HTTPException(500, f"{row['tool'].title()} exited with code {result['exit_code']}; see process log")
             if not stem_files(row['id']):
-                raise HTTPException(500, 'Separator produced no audio files; check mounted paths and log')
+                raise HTTPException(500, 'Workload produced no audio files; check mounted paths and log')
             with guard:
                 query("UPDATE jobs SET state='completed', finished=? WHERE id=? AND state='running'", (now(), row['id']))
         except Exception as exc:
@@ -98,7 +105,7 @@ def worker():
                 stopped = False
                 while not shutdown.is_set():
                     try:
-                        gateway('POST', '/services/separator/stop')
+                        gateway('POST', f"/services/{row['tool']}/stop")
                         stopped = True
                         break
                     except HTTPException:
@@ -116,14 +123,19 @@ async def lifespan(app):
         id TEXT PRIMARY KEY, request_key TEXT UNIQUE NOT NULL, filename TEXT NOT NULL,
         extension TEXT NOT NULL, size INTEGER NOT NULL, model TEXT NOT NULL, format TEXT NOT NULL,
         state TEXT NOT NULL, created TEXT NOT NULL, started TEXT, finished TEXT, error TEXT)''')
+    columns = {column['name'] for column in query('PRAGMA table_info(jobs)')}
+    if 'tool' not in columns:
+        query("ALTER TABLE jobs ADD COLUMN tool TEXT NOT NULL DEFAULT 'separator'")
+    if 'options' not in columns:
+        query("ALTER TABLE jobs ADD COLUMN options TEXT NOT NULL DEFAULT '{}'")
     shutdown.clear()
     thread = threading.Thread(target=worker, daemon=True)
     thread.start()
     yield
     shutdown.set()
-    if query("SELECT id FROM jobs WHERE state='running'"):
+    for item in query("SELECT DISTINCT tool FROM jobs WHERE state='running'"):
         try:
-            await asyncio.to_thread(gateway, 'POST', '/services/separator/stop')
+            await asyncio.to_thread(gateway, 'POST', f"/services/{item['tool']}/stop")
         except HTTPException:
             pass  # Startup recovery will retry before allowing another execution.
     await asyncio.to_thread(thread.join, 20)
@@ -187,7 +199,7 @@ def services():
                 info['state'] = 'stopping'
             elif transition[0] == 'starting' and info['state'] == 'stopped':
                 info['state'] = 'starting'
-        if name == 'separator' and info['state'] == 'ready' and query("SELECT id FROM jobs WHERE state='running'"):
+        if info['state'] == 'ready' and query("SELECT id FROM jobs WHERE state='running' AND tool=?", (name,)):
             info['state'] = 'busy'
         info['url'] = '/separator' if name == 'separator' else s.APPLIO_URL
         result[name] = info
@@ -206,13 +218,12 @@ def stop(service: str, confirm: bool = False):
     if service not in {'separator', 'applio'}:
         raise HTTPException(404, 'Unknown service')
     with guard:
-        active = query("SELECT id FROM jobs WHERE state IN ('running','queued')") if service == 'separator' else []
+        active = query("SELECT id FROM jobs WHERE state IN ('running','queued') AND tool=?", (service,))
         if active and not confirm:
             raise HTTPException(409, 'Stopping cancels the running job and queued jobs. Confirm to continue.')
         transitions[service] = ('stopping', time.monotonic() + 30)
         result = gateway('POST', f'/services/{service}/stop')
-        if service == 'separator':
-            query("UPDATE jobs SET state='cancelled', finished=?, error='Separator stopped by user' WHERE state IN ('running','queued')", (now(),))
+        query("UPDATE jobs SET state='cancelled', finished=?, error='Workload stopped by user' WHERE state IN ('running','queued') AND tool=?", (now(), service))
         return result
 
 @app.get('/api/system/gpu')
@@ -230,20 +241,77 @@ def models():
               if entry['tool'] == 'separator' and entry.get('model_filename') in installed}
     return {'models': installed, 'labels': labels}
 
+
+@app.get('/api/applio/voices')
+def voice_library():
+    return gateway('GET', '/applio/voices')
+
+
+@app.post('/api/applio/voices', status_code=201)
+async def import_voice(request: Request, filename: str, confirm: bool = False):
+    if not confirm:
+        raise HTTPException(409, 'Confirm that you trust this voice model/index and have permission to use it. Models may execute code when loaded by Applio.')
+    if s.DEPLOYMENT_MODE != 'managed':
+        raise HTTPException(409, 'Voice imports require managed mode')
+    filename = filename.replace('\\','/').split('/')[-1][:180]
+    if Path(filename).suffix.lower() not in {'.pth','.index'} or filename.startswith(('.', 'G_', 'D_')):
+        raise HTTPException(422, 'Import a .pth voice model or .index file; ZIP archives are not supported')
+    id = uuid.uuid4().hex
+    directory = s.contained(s.INPUT,'voice-imports',id)
+    directory.mkdir(parents=True)
+    size = 0
+    digest = hashlib.sha256()
+    try:
+        with (directory/'asset').open('xb') as handle:
+            async for chunk in request.stream():
+                size += len(chunk)
+                if size > s.MAX_VOICE_IMPORT:
+                    raise HTTPException(413, 'Voice asset exceeds import limit')
+                digest.update(chunk)
+                await asyncio.to_thread(handle.write,chunk)
+        if not size:
+            raise HTTPException(422, 'Voice file is empty')
+        return await asyncio.to_thread(gateway,'POST','/applio/voices/import',json={
+            'id':id,'filename':filename,'size':size,'sha256':digest.hexdigest()})
+    finally:
+        shutil.rmtree(directory,ignore_errors=True)
+
+
+@app.post('/api/applio/jobs', status_code=201)
+async def submit_conversion(request: Request, filename: str, model: str, format: str = 'WAV',
+                            index: str = '', pitch: int = 0, index_rate: float = 0.75,
+                            protect: float = 0.33, volume_envelope: float = 1,
+                            f0_method: str = 'rmvpe'):
+    from pydantic import ValidationError
+    try:
+        options = ConversionOptions(index=index,pitch=pitch,index_rate=index_rate,protect=protect,
+                                    volume_envelope=volume_envelope,f0_method=f0_method)
+    except ValidationError:
+        raise HTTPException(422, 'Invalid conversion settings')
+    library = await asyncio.to_thread(gateway,'GET','/applio/voices')
+    if model not in {item['id'] for item in library['models']} or (index and index not in {item['id'] for item in library['indexes']}):
+        raise HTTPException(422, 'Choose an installed voice model/index')
+    return await submit_audio(request,filename,model,format,'applio',options.model_dump())
+
 @app.post('/api/separator/jobs', status_code=201)
 async def submit(request: Request, filename: str, model: str, format: str = 'WAV'):
+    return await submit_audio(request, filename, model, format)
+
+
+async def submit_audio(request, filename, model, format, tool='separator', options=None):
     # Raw request streaming enforces the limit before multipart can spool an oversized file.
     filename = filename.replace('\\', '/').split('/')[-1][:180]
     extension = Path(filename).suffix.lower()
-    if extension not in s.EXTENSIONS or model not in s.installed_models() or format not in {'WAV', 'MP3', 'FLAC'}:
+    if extension not in s.EXTENSIONS or (tool == 'separator' and model not in s.installed_models()) or format not in {'WAV', 'MP3', 'FLAC'}:
         raise HTTPException(422, 'Choose a supported audio file, installed model, and output format')
+    serialized_options = json.dumps(options or {}, sort_keys=True)
     key = request.headers.get('idempotency-key', '')
     if not 8 <= len(key) <= 128:
         raise HTTPException(422, 'A stable Idempotency-Key of 8–128 characters is required')
     async with upload_lock:
         previous = await asyncio.to_thread(query, 'SELECT * FROM jobs WHERE request_key=?', (key,), True)
         if previous:
-            if (previous['filename'], previous['model'], previous['format']) != (filename, model, format):
+            if (previous['filename'],previous['model'],previous['format'],previous['tool'],previous['options']) != (filename,model,format,tool,serialized_options):
                 raise HTTPException(409, 'Idempotency key already used for a different submission')
             return previous
         id = uuid.uuid4().hex
@@ -266,8 +334,8 @@ async def submit(request: Request, filename: str, model: str, format: str = 'WAV
                 # No gateway DAC_OVERRIDE/CHOWN capability is needed.
                 output_directory.chmod(0o770)
             with guard:
-                await asyncio.to_thread(query, 'INSERT INTO jobs (id,request_key,filename,extension,size,model,format,state,created) VALUES (?,?,?,?,?,?,?,?,?)',
-                                        (id, key, filename, extension, size, model, format, 'queued', now()))
+                await asyncio.to_thread(query, 'INSERT INTO jobs (id,request_key,filename,extension,size,model,format,state,created,tool,options) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
+                                        (id, key, filename, extension, size, model, format, 'queued', now(), tool, serialized_options))
         except BaseException:
             shutil.rmtree(directory, ignore_errors=True)
             shutil.rmtree(output_directory, ignore_errors=True)
@@ -288,8 +356,8 @@ def cancel(id: str):
         row = job_or_404(id)
         if row['state'] == 'running':
             # Stopping the approved container terminates the entire inference process tree.
-            gateway('POST', '/services/separator/stop')
-            query("UPDATE jobs SET state='cancelled', finished=?, error='Cancelled; separator stopped to release resources' WHERE state IN ('running','queued')", (now(),))
+            gateway('POST', f"/services/{row['tool']}/stop")
+            query("UPDATE jobs SET state='cancelled', finished=?, error='Cancelled; workload stopped to release resources' WHERE state IN ('running','queued') AND tool=?", (now(),row['tool']))
         elif row['state'] == 'queued':
             query("UPDATE jobs SET state='cancelled', finished=? WHERE id=?", (now(), id))
     return job_or_404(id)
@@ -355,6 +423,7 @@ app.mount('/static', StaticFiles(directory=STATIC), name='static')
 
 @app.get('/')
 @app.get('/separator')
+@app.get('/applio')
 @app.get('/setup')
 def page():
     return FileResponse(STATIC / 'index.html')
