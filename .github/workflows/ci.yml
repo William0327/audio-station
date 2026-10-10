@@ -36,14 +36,18 @@ jobs:
           docker compose up -d --build --wait --wait-timeout 180 controller gateway
       - name: Verify first-run state without a GPU or any AI workload
         run: |
-          curl --fail http://localhost:8080/health
-          curl --fail http://localhost:8080/setup
-          curl --fail http://localhost:8080/api/setup | python -c 'import json,sys; d=json.load(sys.stdin); assert d["mode"]=="managed"; assert all(not t["installed"] and t["state"]=="stopped" for t in d["tools"].values())'
+          test "$(docker compose port controller 8080)" = "127.0.0.1:8080"
+          curl --fail --silent --show-error --retry 5 --retry-connrefused --retry-delay 1 --connect-timeout 3 --max-time 10 http://127.0.0.1:8080/health
+          curl --fail --silent --show-error --connect-timeout 3 --max-time 10 http://127.0.0.1:8080/setup
+          curl --fail --silent --show-error --connect-timeout 3 --max-time 10 http://127.0.0.1:8080/api/setup | python -c 'import json,sys; d=json.load(sys.stdin); assert d["mode"]=="managed"; assert all(not t["installed"] and t["state"]=="stopped" for t in d["tools"].values())'
           test -z "$(docker ps -a --filter label=io.audio-station.tool --format '{{.ID}}')"
-          test -z "$(docker compose port gateway 8081)"
+          docker inspect "$(docker compose ps -q gateway)" --format '{{json .HostConfig.PortBindings}}' | python -c 'import json,sys; assert not json.load(sys.stdin), "Gateway must not publish any ports"'
       - name: Diagnostics
         if: failure()
-        run: docker compose logs --tail=100 controller gateway
+        run: |
+          docker compose ps -a
+          docker compose port controller 8080 || true
+          docker compose logs --tail=100 controller gateway
       - name: Clean ephemeral CI deployment
         if: always()
         run: docker compose down

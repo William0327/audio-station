@@ -19,6 +19,20 @@ def test_compose_profiles_and_privilege_boundary():
     assert set(config['volumes']) >= {'station-models','station-data','station-state','applio-models','applio-cache'}
 
 
+def test_controller_has_publishable_network_without_exposing_gateway():
+    config=yaml.safe_load((ROOT/'compose.yaml').read_text())
+    services=config['services']
+    networks=config['networks']
+    controller_networks=set(services['controller']['networks'])
+    gateway_networks=set(services['gateway']['networks'])
+    assert networks['control']['internal'] is True
+    assert 'control' in controller_networks & gateway_networks
+    web_networks={name for name in controller_networks if not networks[name].get('internal',False)}
+    assert web_networks, 'Internal-only networks do not provide host port publishing'
+    assert web_networks.isdisjoint(gateway_networks)
+    assert 'ports' not in services['gateway']
+
+
 def test_release_source_hygiene():
     assert check_release.check(check_release.source_files())==[]
 

@@ -9,6 +9,7 @@
 | Unsupported remote/rootless daemon | Run the installer on the Linux GPU host, with the local rootful Unix socket. Docker Desktop/WSL, ARM, AMD, and macOS are outside v1 support. |
 | Disk preflight fails | Provide at least 30 GiB on repository and Docker storage filesystems. Large tool builds can need more; inspect `docker system df` before selectively clearing expendable build caches. Preserve model/data volumes. |
 | Port already allocated | Choose free `CONTROLLER_PORT`/`APPLIO_PORT` values in `.env`, update `APPLIO_PUBLIC_URL`, then rerun installer. No data migration is needed. |
+| Controller healthy but web port refuses connections | Run `docker compose port controller 8080`. The controller needs both the `web` bridge for port publishing and the private `control` network for gateway access. After updating Compose, run `docker compose up -d controller gateway` to recreate services without removing volumes. With the default bind address, test `http://127.0.0.1:8080/health` on the Docker host. |
 | Unowned container/volume collision | Choose another `STATION_INSTANCE` or configure external mode. Never delete or relabel unknown data to force adoption. |
 | Build failed | Read Setup installation activity and `docker compose logs --tail=100 gateway`. Resolve connectivity/disk/package error and retry; stopped existing containers and models are preserved. |
 | Applio exits immediately | Install the Applio inference essentials bundle, then Start. Inspect `docker logs audio-station-applio` (or your configured instance's name). |

@@ -33,7 +33,8 @@ services:
       - ${HOST_INPUT_DIR:-station-input}:/input
       - ${HOST_OUTPUT_DIR:-station-output}:/output
       - ${HOST_MODELS_DIR:-station-models}:/models:ro
-    networks: [control]
+    # Published ports need a non-internal bridge; keep gateway traffic private.
+    networks: [web, control]
     depends_on:
       gateway: {condition: service_healthy}
     healthcheck:
@@ -151,6 +152,7 @@ volumes:
   applio-logs: {name: '${STATION_INSTANCE:-audio-station}-applio-logs'}
   applio-cache: {name: '${STATION_INSTANCE:-audio-station}-applio-cache'}
 networks:
+  web: {}
   control: {internal: true}
   downloads: {}
   workloads:
