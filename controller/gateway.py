@@ -1,5 +1,6 @@
 """The only component with socket access. No arbitrary Docker API forwarding."""
 import hmac
+import json
 import os
 import threading
 from contextlib import asynccontextmanager
@@ -44,6 +45,28 @@ def container(service):
 def health():
     return {'ok': True}
 
+
+def stop_identity(c):
+    state = c.attrs['State']
+    return {'container': c.id, 'started': state.get('StartedAt'), 'finished': state.get('FinishedAt')}
+
+
+def remember_stop(service, c):
+    directory = s.STATE / 'lifecycle'
+    directory.mkdir(parents=True, exist_ok=True)
+    destination = directory / f'{service}.json'
+    temporary = destination.with_suffix('.tmp')
+    temporary.write_text(json.dumps(stop_identity(c)), encoding='utf-8')
+    os.replace(temporary, destination)
+
+
+def intentionally_stopped(service, c):
+    try:
+        recorded = json.loads((s.STATE / 'lifecycle' / f'{service}.json').read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        return False
+    return recorded == stop_identity(c)
+
 @app.get('/services/{service}')
 def status(service: str):
     if service not in adapters.TOOLS:
@@ -70,7 +93,9 @@ def status(service: str):
                     result['state'] = 'starting'
             except httpx.HTTPError:
                 result['state'] = 'starting'
-    elif state.get('ExitCode', 0) != 0 or state.get('Dead'):
+    elif state.get('Dead') or state.get('OOMKilled') or state.get('Error'):
+        result.update(state='error', error=result['error'] or ('Container was killed by the memory limit' if state.get('OOMKilled') else 'Container is dead'))
+    elif state.get('ExitCode', 0) != 0 and not intentionally_stopped(service, c):
         result.update(state='error', error=result['error'] or f"Container exited with code {state.get('ExitCode')}")
     return result
 
@@ -87,7 +112,12 @@ def lifecycle(service: str, action: str):
                 raise HTTPException(409, 'Install Applio inference essentials from Models before starting')
         try:
             tool_adapter = adapters.adapter(service)
+            was_running = c.attrs['State'].get('Running', False)
             tool_adapter.start(c) if action == 'start' else tool_adapter.stop(c)
+            if action == 'stop' and was_running:
+                c.reload()
+                if not c.attrs['State'].get('Running'):
+                    remember_stop(service, c)
             return {'state': 'starting' if action == 'start' else 'stopped'}
         except docker.errors.DockerException:
             raise HTTPException(502, 'Docker operation failed; inspect container logs on host')

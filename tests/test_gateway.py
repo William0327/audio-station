@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+import pytest
 
 from fastapi.testclient import TestClient
 from controller import gateway as engine
@@ -42,9 +43,11 @@ def test_scoped_lifecycle_and_readiness(monkeypatch):
     monkeypatch.setattr(s, 'TOKEN', 'test-secret')
     calls = []
     class Container:
+        id = 'test-container'
         attrs = {'State': {'Running': True}}
         def start(self): calls.append('start')
         def stop(self, timeout): calls.append(('stop', timeout))
+        def reload(self): pass
     monkeypatch.setattr(engine, 'container', lambda service: Container())
     monkeypatch.setattr(engine.httpx, 'get', lambda *args, **kwargs: SimpleNamespace(status_code=200))
     headers = {'X-Gateway-Token': s.TOKEN}
@@ -56,3 +59,33 @@ def test_scoped_lifecycle_and_readiness(monkeypatch):
         monkeypatch.setattr(engine.httpx, 'get', lambda *args, **kwargs: SimpleNamespace(status_code=503))
         assert client.get('/services/applio', headers=headers).json()['state'] == 'starting'
         assert client.post('/services/separator/remove', headers=headers).status_code == 404
+
+
+@pytest.mark.parametrize('exit_code',[137,143])
+def test_requested_stop_is_stopped_but_later_crashes_are_errors(monkeypatch,exit_code):
+    monkeypatch.setattr(s,'TOKEN','test-secret')
+    class Container:
+        id='separator-instance'
+        attrs={'State':{'Running':True,'StartedAt':'first-start','FinishedAt':''}}
+        def stop(self,timeout):
+            self.attrs['State'].update(Running=False,ExitCode=exit_code,FinishedAt='first-stop')
+        def reload(self): pass
+    c=Container()
+    monkeypatch.setattr(engine,'container',lambda service:c)
+    headers={'X-Gateway-Token':s.TOKEN}
+    with TestClient(engine.app) as client:
+        assert client.post('/services/separator/stop',headers=headers).status_code==200
+        assert client.get('/services/separator',headers=headers).json()['state']=='stopped'
+    # A gateway restart must retain the intentional-stop identity.
+    with TestClient(engine.app) as client:
+        assert client.get('/services/separator',headers=headers).json()['state']=='stopped'
+        c.attrs['State']['OOMKilled']=True
+        assert client.get('/services/separator',headers=headers).json()['state']=='error'
+        c.attrs['State'].update(OOMKilled=False,StartedAt='second-start',FinishedAt='crash')
+        assert client.get('/services/separator',headers=headers).json()['state']=='error'
+        # Clicking Stop on an already crashed workload must not hide the crash.
+        assert client.post('/services/separator/stop',headers=headers).status_code==200
+        assert client.get('/services/separator',headers=headers).json()['state']=='error'
+        c.attrs['State'].update(StartedAt='first-start',FinishedAt='first-stop')
+        c.id='replacement-container'
+        assert client.get('/services/separator',headers=headers).json()['state']=='error'
