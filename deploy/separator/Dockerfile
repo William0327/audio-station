@@ -4,7 +4,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends python3 python3
 RUN python3 -m venv /venv
 ENV PATH="/venv/bin:${PATH}"
 RUN pip install torch==2.7.1 torchaudio==2.7.1 --index-url https://download.pytorch.org/whl/cu128
-RUN pip install "audio-separator[gpu]==0.47.0" "onnxruntime-gpu==1.22.0"
+RUN pip install "audio-separator[gpu]==0.47.0" "onnxruntime-gpu==1.22.0" "audioread==3.0.1"
+# Import the inference entry point during build, without loading models or a GPU.
+RUN python3 -c 'from audio_separator.separator import Separator; import audioread'
 COPY launch_separator.py /station/launch_separator.py
 RUN printf '#!/venv/bin/python3\nimport runpy\nrunpy.run_path("/station/launch_separator.py", run_name="__main__")\n' > /venv/bin/station-separate && chmod 755 /venv/bin/station-separate
 WORKDIR /work

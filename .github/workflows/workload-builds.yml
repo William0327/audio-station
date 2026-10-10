@@ -16,7 +16,7 @@ jobs:
         run: |
           docker build -t station-check:${{ matrix.tool }} deploy/${{ matrix.tool }}
           if [ '${{ matrix.tool }}' = separator ]; then
-            docker run --rm station-check:separator python3 -c 'from importlib.metadata import version; assert version("audio-separator")=="0.47.0"'
+            docker run --rm station-check:separator python3 -c 'from importlib.metadata import version; from audio_separator.separator import Separator; import audioread; assert version("audio-separator")=="0.47.0"; assert version("audioread")=="3.0.1"'
           else
             docker run --rm station-check:applio python3 -c 'from pathlib import Path; assert Path("/app/app.py").is_file(); import torch, gradio'
           fi
