@@ -97,4 +97,4 @@ def worker():
             sql("UPDATE operations SET state='completed', progress=100 WHERE id=?", (job['id'],))
         except Exception as exc:
             message = str(exc.detail) if isinstance(exc, HTTPException) else str(exc)
-            sql("UPDATE operations SET state='failed', message=? WHERE id=?", (message[:1000], job['id']))
+            sql("UPDATE operations SET state='failed', message=? WHERE id=?", (message[:4000], job['id']))

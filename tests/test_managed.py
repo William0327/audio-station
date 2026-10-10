@@ -63,6 +63,20 @@ def test_missing_build_context_has_actionable_error(monkeypatch, tmp_path):
     assert calls==[]
 
 
+def test_failed_build_retains_pip_error_without_creating_container():
+    client,calls=client_with_containers()
+    client.api.build=lambda **kwargs:iter([
+        {'stream':'Collecting torch==2.7.1\n'},
+        {'stream':'ERROR: Could not install packages: No space left on device\n'},
+        {'error':'The command pip install returned a non-zero code: 1'},
+    ])
+    with pytest.raises(RuntimeError) as error:
+        adapters.ManagedAdapter(adapters.TOOLS['applio']).provision(client,lambda *args:None)
+    assert 'No space left on device' in str(error.value)
+    assert 'non-zero code: 1' in str(error.value)
+    assert calls==[]
+
+
 def test_external_adapter_never_provisions(monkeypatch):
     monkeypatch.setattr(adapters,'MODE','external')
     with pytest.raises(HTTPException):

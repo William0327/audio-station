@@ -3,6 +3,7 @@
 No request can supply an image, mount, device, network, or command.
 """
 import os
+from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
@@ -90,11 +91,14 @@ class ManagedAdapter(ContainerLifecycle):
                 '`docker compose up -d --build controller gateway`, then retry installation.'
             )
         # Build only shipped Docker contexts. Neither paths nor build args come from HTTP.
+        build_tail = deque(maxlen=24)
         for item in client.api.build(path=str(context), tag=self.tool.image, rm=True, decode=True, forcerm=True):
             if item.get('error'):
-                raise RuntimeError(item['error'][:1000])
+                detail = '\n'.join(build_tail)[-3000:]
+                raise RuntimeError(f'{detail}\n{item["error"][:900]}'.strip())
             line = item.get('stream') or item.get('status')
             if line:
+                build_tail.append(str(line).strip()[-3000:])
                 progress(str(line).strip()[-500:], None)
         # Recheck after a long build; never replace a concurrently-created container.
         try:

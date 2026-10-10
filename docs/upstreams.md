@@ -7,6 +7,7 @@
 | Applio | 3.5.1, commit `b8791412993ebc934c148bd84798782af2f0439e` | [official release](https://github.com/IAHispano/Applio/releases/tag/3.5.1) |
 | Applio source archive SHA256 | `56d30b0d39d45d6c4c3aa331b8dbd8fd1417924d29defea200643cab7c7f864f` | checked during image build |
 | PyTorch / Torchaudio | 2.7.1, CUDA 12.8 wheels | [official PyTorch packages](https://download.pytorch.org/whl/cu128) |
+| Applio build pip | 25.1.1 | Upgraded before PyTorch installation to handle normalized dependency names in wheel metadata |
 | ONNX Runtime GPU | 1.22.0 | exact PyPI package |
 | CUDA runtime | 12.8.1, cuDNN runtime, Ubuntu 24.04 | NVIDIA CUDA image |
 | Applio inference catalogue | HF commit `70ed563897504c756ec94067c12c902c4fd42025` | [official publisher assets](https://huggingface.co/IAHispano/Applio/tree/70ed563897504c756ec94067c12c902c4fd42025/Resources) |
