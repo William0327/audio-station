@@ -75,10 +75,14 @@ async function poll() {
   try {const [services,jobs]=await Promise.all([api('/api/services'),api('/api/jobs')]);renderServices(services);renderJobs(jobs);if(cycles++%3===0)renderGPU(await api('/api/system/gpu'));$('last-sync').textContent='Updated '+new Date().toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'});}
   catch(e){notice(e.message);$('last-sync').textContent='Connection unavailable';}finally{polling=false;}
 }
-function choose(file) {selectedFile=file;requestKey=crypto.randomUUID();$('file-info').textContent=file?file.name+' · '+size(file.size):'No audio selected';}
+function newRequestKey() {
+  // getRandomValues also works over HTTP on private network addresses.
+  return Array.from(crypto.getRandomValues(new Uint8Array(16)),byte=>byte.toString(16).padStart(2,'0')).join('');
+}
+function choose(file) {selectedFile=file;requestKey=newRequestKey();$('file-info').textContent=file?file.name+' · '+size(file.size):'No audio selected';}
 $('audio-file').addEventListener('change',event=>choose(event.target.files[0]));
-$('model').addEventListener('change',()=>{requestKey=crypto.randomUUID();poll();});
-$('format').addEventListener('change',()=>requestKey=crypto.randomUUID());
+$('model').addEventListener('change',()=>{requestKey=newRequestKey();poll();});
+$('format').addEventListener('change',()=>requestKey=newRequestKey());
 const drop=$('dropzone');['dragenter','dragover'].forEach(name=>drop.addEventListener(name,e=>{e.preventDefault();drop.classList.add('drag');}));['dragleave','drop'].forEach(name=>drop.addEventListener(name,e=>{e.preventDefault();drop.classList.remove('drag');}));
 drop.addEventListener('drop',e=>{if(e.dataTransfer.files.length){$('audio-file').files=e.dataTransfer.files;choose(e.dataTransfer.files[0]);}});
 $('job-form').addEventListener('submit',async e=>{
