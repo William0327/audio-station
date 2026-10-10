@@ -83,6 +83,12 @@ class ManagedAdapter(ContainerLifecycle):
             pass
         progress('Building pinned upstream application (first install can take several minutes)', None)
         context = Path(__file__).resolve().parent.parent / 'deploy' / self.tool.id
+        if not context.is_dir() or not (context / 'Dockerfile').is_file():
+            raise RuntimeError(
+                f'Missing bundled build files for {self.tool.title}. '
+                'Update the repository and rebuild the controller/gateway image with '
+                '`docker compose up -d --build controller gateway`, then retry installation.'
+            )
         # Build only shipped Docker contexts. Neither paths nor build args come from HTTP.
         for item in client.api.build(path=str(context), tag=self.tool.image, rm=True, decode=True, forcerm=True):
             if item.get('error'):

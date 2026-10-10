@@ -1,8 +1,20 @@
 from pathlib import Path
+import subprocess
 import yaml
 from scripts import check_release
 
 ROOT=Path(__file__).resolve().parent.parent
+
+
+def test_workload_build_files_are_present_and_not_gitignored():
+    files=[f'deploy/{tool}/{name}' for tool in ('separator','applio')
+           for name in ('Dockerfile',f'launch_{tool}.py')]
+    for name in files:
+        assert (ROOT/name).is_file(), f'Missing shipped build file: {name}'
+    if (ROOT/'.git').exists():
+        result=subprocess.run(['git','check-ignore','--no-index',*files],cwd=ROOT,
+                              capture_output=True,text=True)
+        assert result.returncode==1, result.stdout or result.stderr
 
 
 def test_compose_profiles_and_privilege_boundary():

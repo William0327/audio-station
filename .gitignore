@@ -12,4 +12,4 @@ models/
 *.station-part
 *.station-new
 release/
-applio/
+/applio/

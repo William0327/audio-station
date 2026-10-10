@@ -55,6 +55,14 @@ def test_managed_name_collision_and_version_change_are_not_adopted(monkeypatch):
     assert calls==[]
 
 
+def test_missing_build_context_has_actionable_error(monkeypatch, tmp_path):
+    monkeypatch.setattr(adapters, '__file__', str(tmp_path / 'controller' / 'adapters.py'))
+    client,calls=client_with_containers()
+    with pytest.raises(RuntimeError, match='Missing bundled build files for Applio'):
+        adapters.ManagedAdapter(adapters.TOOLS['applio']).provision(client,lambda *args:None)
+    assert calls==[]
+
+
 def test_external_adapter_never_provisions(monkeypatch):
     monkeypatch.setattr(adapters,'MODE','external')
     with pytest.raises(HTTPException):
