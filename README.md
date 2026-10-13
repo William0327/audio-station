@@ -40,6 +40,21 @@ Browser -> CPU controller (FastAPI + SQLite audio jobs)
 
 Only the gateway sees the Docker socket. No API accepts arbitrary images, commands, mounts, or download URLs. Normal Compose startup excludes optional AI workload profiles. Persistent named volumes hold job metadata, installation metadata, uploaded audio, outputs, models, and Applio data. Localhost is the default binding; this is a private single-user app, with no public authentication service.
 
+## Memory
+
+Audio Separator and Applio each use a **4 GiB shared-memory limit** (`shm_size: 4g`) for `/dev/shm`, both when installed through the web UI and when created with the optional Compose profiles. Docker otherwise defaults this space to 64 MiB, which can be too small for multiprocessing and audio workloads. See [Docker's shared-memory documentation](https://docs.docker.com/engine/containers/run/#runtime-constraints-on-resources).
+
+Shared memory is separate from total system RAM and GPU VRAM. The 4 GiB setting caps shared-memory capacity; it does not reserve 4 GiB at startup or limit the workload's total RAM to 4 GiB. Audio Station sets no total RAM limit. Actual usage depends on the model, audio length, and upstream settings. Leave host RAM available for the OS and other applications; GPU out-of-memory errors require reducing workload/model settings or using a GPU with more VRAM. Increasing shared memory does not increase VRAM. Stop unused AI tools to release their resources; the CPU controller can stay online.
+
+Existing workload containers retain their original shared-memory configuration after a controller/gateway update. To apply this default in managed mode:
+
+1. Finish jobs, stop the affected tool in the UI, and back up its persistent data using the [upgrade guide](docs/upgrading.md).
+2. Update the repository and rebuild the control services with `docker compose up -d --build controller gateway`.
+3. Verify the stopped container's ownership labels, then remove only that container with `docker rm audio-station-applio` or `docker rm audio-station-separator`. Substitute your instance name if customized. Do not use `-v` or delete volumes.
+4. Reinstall the tool from Setup, then start it explicitly. Existing models, indexes, audio, and history remain in their persistent volumes.
+
+Verify the resulting limit with `docker inspect audio-station-applio --format '{{.HostConfig.ShmSize}}'` (or use the Separator container name); 4 GiB is `4294967296` bytes. A simple stop/start does not change this setting. For externally managed containers, configure shared memory and recreate them through their existing deployment process; Audio Station does not alter their configuration.
+
 ## Documentation
 
 - [Install and first-run setup](docs/installation.md)

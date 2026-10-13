@@ -38,6 +38,7 @@ def test_managed_install_is_stopped_scoped_and_idempotent(name,monkeypatch):
     assert config['restart_policy']=={'Name':'no'}
     assert config['entrypoint']==[]
     assert config['device_requests'][0]['Capabilities']==[['gpu']]
+    assert config['shm_size']=='4g'
     assert config['name']==adapters.INSTANCE+'-'+name
     assert client.containers.current.status=='created'
     assert progress[-1][1]==100

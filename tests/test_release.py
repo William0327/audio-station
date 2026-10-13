@@ -25,6 +25,8 @@ def test_compose_profiles_and_privilege_boundary():
     assert services['applio']['profiles']==['applio']
     assert services['separator']['restart']=='no'
     assert services['applio']['restart']=='no'
+    assert services['separator']['shm_size']=='4g'
+    assert services['applio']['shm_size']=='4g'
     assert 'ports' not in services['gateway']
     assert all('docker.sock' not in volume for volume in services['controller']['volumes'])
     assert 'deploy' not in services['controller']

@@ -5,6 +5,7 @@ x-controller: &controller-image
     context: .
     dockerfile: controller/Dockerfile
 x-gpu: &gpu
+  shm_size: '4g'
   deploy:
     resources:
       reservations:

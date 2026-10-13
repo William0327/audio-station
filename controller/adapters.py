@@ -133,6 +133,7 @@ class ManagedAdapter(ContainerLifecycle):
             labels={OWNER: INSTANCE, 'io.audio-station.tool': self.tool.id, 'io.audio-station.version': self.tool.version},
             volumes=volumes, ports=ports, network=NETWORK, environment=environment,
             device_requests=[docker.types.DeviceRequest(count=-1, capabilities=[['gpu']])],
+            shm_size='4g',
             restart_policy={'Name': 'no'}, init=True, security_opt=['no-new-privileges:true'], cap_drop=['ALL'],
         )
         # Docker create leaves the workload stopped. Installation never calls start.
